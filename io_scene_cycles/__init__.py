@@ -16,30 +16,11 @@
 
 # XML exporter for generating test files, not intended for end users
 
-import os
-import xml.etree.ElementTree as etree
-import xml.dom.minidom as dom
-
 import bpy
 from bpy_extras.io_utils import ExportHelper
 from bpy.props import PointerProperty, StringProperty
 
-def strip(root):
-    root.text = None
-    root.tail = None
 
-    for elem in root:
-        strip(elem)
-
-def write(node, fname):
-    strip(node)
-
-    s = etree.tostring(node)
-    s = dom.parseString(s).toprettyxml()
-
-    f = open(fname, "w")
-    f.write(s)
-    
 class CyclesXMLSettings(bpy.types.PropertyGroup):
     @classmethod
     def register(cls):
@@ -57,7 +38,7 @@ class CyclesXMLSettings(bpy.types.PropertyGroup):
     @classmethod
     def unregister(cls):
         del bpy.types.Scene.cycles_xml
-        
+
 # User Interface Drawing Code
 class RenderButtonsPanel():
     bl_space_type = 'PROPERTIES'
@@ -81,7 +62,7 @@ class PHYSICS_PT_fluid_export(RenderButtonsPanel, bpy.types.Panel):
         #layout.prop(cycles, "filepath")
         layout.operator("export_mesh.cycles_xml")
 
-        
+
 # Export Operator
 class ExportCyclesXML(bpy.types.Operator, ExportHelper):
     """Export a scene to the Cycles Standalone XML format"""
@@ -99,7 +80,9 @@ class ExportCyclesXML(bpy.types.Operator, ExportHelper):
 
         from . import export_cycles
 
-        return export_cycles.export_cycles(self, context.scene)
+        return export_cycles.export_cycles(
+            scene=context.scene,
+            fp=open(self.filepath, 'w'))
 
 
 
