@@ -12,20 +12,20 @@ def export_cycles(fp, scene):
     return {'FINISHED'}
 
 def gen_scene_nodes(scene):
-    yield film_node(scene)
+    yield write_film(scene)
 
-    yield camera_node(scene)
+    yield write_camera(scene)
 
     # for object in scene.shaders:
     #     pass #gen_shader_nodes(scene)
 
     for object in scene.objects:
-        node = object_node(object, scene=scene)
+        node = write_object(object, scene=scene)
         if node is not None:
             yield node
 
 
-def camera_node(scene):
+def write_camera(scene):
     camera = scene.camera.data
 
     if camera.type == 'ORTHO':
@@ -46,7 +46,7 @@ def camera_node(scene):
     })
 
 
-def film_node(scene):
+def write_film(scene):
     render = scene.render
     scale = scene.render.resolution_percentage / 100.0
     size_x = int(scene.render.resolution_x * scale)
@@ -54,11 +54,11 @@ def film_node(scene):
 
     return etree.Element('film', {'width': str(size_x), 'height': str(size_y)})
 
-def object_node(object, scene):
+def write_object(object, scene):
     if object.type == 'MESH':
-        return mesh_node(object, scene)
+        return write_mesh(object, scene)
     elif object.type == 'LAMP':
-        return lamp_node(object)
+        return write_light(object)
     elif object.type == 'CAMERA':
         return
     else:
@@ -67,7 +67,7 @@ def object_node(object, scene):
     return node
 
 
-def lamp_node(object):
+def write_light(object):
     # TODO export shader here? Where?
 
     return etree.Element('light', {
@@ -77,7 +77,7 @@ def lamp_node(object):
             object.location[2])
     })
 
-def mesh_node(object, scene):
+def write_mesh(object, scene):
     mesh = object.to_mesh(scene, True, 'PREVIEW')
 
     # generate mesh node
@@ -91,6 +91,7 @@ def mesh_node(object, scene):
 
         for v in f.vertices:
             verts += str(v) + " "
+
         verts += " "
 
     mesh = etree.Element('mesh', attrib={'nverts': nverts, 'verts': verts, 'P': P})
@@ -110,7 +111,7 @@ def space_separated_coords(coords):
     return ' '.join(map(str, coords))
 
 def space_separated_matrix(matrix):
-    return ' '.join(space_separated_coords(row) for row in matrix)
+    return ' '.join(space_separated_coords(row) + ' ' for row in matrix)
 
 def strip(root):
     root.text = None
