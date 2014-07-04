@@ -14,8 +14,6 @@ def export_cycles(fp, scene):
 def gen_scene_nodes(scene):
     yield write_film(scene)
 
-    yield write_camera(scene)
-
     # for object in scene.shaders:
     #     pass #gen_shader_nodes(scene)
 
@@ -25,8 +23,8 @@ def gen_scene_nodes(scene):
             yield node
 
 
-def write_camera(scene):
-    camera = scene.camera.data
+def write_camera(camera, scene):
+    camera = camera.data
 
     if camera.type == 'ORTHO':
         camera_type = 'orthogonal'
@@ -54,16 +52,19 @@ def write_film(scene):
 
     return etree.Element('film', {'width': str(size_x), 'height': str(size_y)})
 
+
+
 def write_object(object, scene):
     if object.type == 'MESH':
-        return write_mesh(object, scene)
+        node = write_mesh(object, scene)
     elif object.type == 'LAMP':
-        return write_light(object)
+        node = write_light(object)
     elif object.type == 'CAMERA':
-        return
+        node = write_camera(object, scene)
     else:
         raise NotImplementedError('Object type: %r' % object.type)
 
+    node = wrap_in_transforms(node, object)
     return node
 
 
@@ -94,11 +95,7 @@ def write_mesh(object, scene):
 
         verts += " "
 
-    mesh = etree.Element('mesh', attrib={'nverts': nverts, 'verts': verts, 'P': P})
-
-    mesh = wrap_in_transforms(mesh, object)
-
-    return mesh
+    return etree.Element('mesh', attrib={'nverts': nverts, 'verts': verts, 'P': P})
 
 
 def wrap_in_transforms(xml_element, object):
@@ -112,12 +109,6 @@ def space_separated_coords(coords):
 
 def space_separated_matrix(matrix):
     return ' '.join(space_separated_coords(row) + ' ' for row in matrix)
-
-def strip(root):
-    root.text = None
-    root.tail = None
-    for elem in root:
-        strip(elem)
 
 def write(node, fp):
     # strip(node)
