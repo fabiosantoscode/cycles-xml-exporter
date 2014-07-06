@@ -1,5 +1,6 @@
 
 import os
+import bpy.types
 import xml.etree.ElementTree as etree
 import xml.dom.minidom as dom
 
@@ -64,6 +65,7 @@ def write_object(object, scene):
     else:
         raise NotImplementedError('Object type: %r' % object.type)
 
+    node = wrap_in_state(node, object)
     node = wrap_in_transforms(node, object)
     return node
 
@@ -97,12 +99,27 @@ def write_mesh(object, scene):
 
     return etree.Element('mesh', attrib={'nverts': nverts, 'verts': verts, 'P': P})
 
-
 def wrap_in_transforms(xml_element, object):
     wrapper = etree.Element('transform', { 'matrix': space_separated_matrix(object.matrix_world) })
     wrapper.append(xml_element)
 
     return wrapper
+
+def wrap_in_state(xml_element, object):
+    # UNSUPPORTED: Meshes with multiple materials
+
+    try:
+        material = getattr(object.data, 'materials', [])[0]
+    except LookupError:
+        return xml_element
+
+    state = etree.Element('state', {
+        'shader': material.name
+    })
+
+    state.append(xml_element)
+
+    return state
 
 def space_separated_coords(coords):
     return ' '.join(map(str, coords))
