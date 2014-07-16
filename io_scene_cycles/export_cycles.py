@@ -78,6 +78,9 @@ def write_object(object, scene):
 
 # from the Node Wrangler, by Barte
 def write_material(material):
+    if not material.use_nodes:
+        return None
+
     def xlateSocket(typename, socketname):
         for i in xlate:
             if i[0]==typename:
