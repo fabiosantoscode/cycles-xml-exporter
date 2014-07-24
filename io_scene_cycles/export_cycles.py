@@ -1,5 +1,7 @@
 
+import math
 import os
+import mathutils
 import bpy.types
 import xml.etree.ElementTree as etree
 import xml.dom.minidom as dom
@@ -246,7 +248,15 @@ def write_mesh(object, scene):
     return etree.Element('mesh', attrib={'nverts': nverts, 'verts': verts, 'P': P})
 
 def wrap_in_transforms(xml_element, object):
-    wrapper = etree.Element('transform', { 'matrix': space_separated_matrix(object.matrix_world) })
+    matrix = object.matrix_world
+
+    if (object.type == 'CAMERA'):
+        # In cycles, the camera points at its Z axis
+        matrix = matrix.copy()
+        rot = mathutils.Matrix.Rotation(math.pi, 4, 'X')
+        matrix *= rot
+
+    wrapper = etree.Element('transform', { 'matrix': space_separated_matrix(matrix) })
     wrapper.append(xml_element)
 
     return wrapper
