@@ -252,11 +252,10 @@ def wrap_in_transforms(xml_element, object):
 
     if (object.type == 'CAMERA'):
         # In cycles, the camera points at its Z axis
-        matrix = matrix.copy()
         rot = mathutils.Matrix.Rotation(math.pi, 4, 'X')
-        matrix *= rot
+        matrix = matrix.copy() * rot
 
-    wrapper = etree.Element('transform', { 'matrix': space_separated_matrix(matrix) })
+    wrapper = etree.Element('transform', { 'matrix': space_separated_matrix(matrix.transposed()) })
     wrapper.append(xml_element)
 
     return wrapper
