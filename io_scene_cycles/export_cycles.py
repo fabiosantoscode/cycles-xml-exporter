@@ -188,7 +188,7 @@ def write_material(material):
                 return { 'src': path }
             else:
                 import base64
-                h, w = image.size
+                w, h = image.size
                 image = image.copy()
                 newimage = bpy.data.images.new('/tmp/cycles_export', width=w, height=h)
                 newimage.file_format = 'PNG'
