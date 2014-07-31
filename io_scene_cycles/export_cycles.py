@@ -6,8 +6,13 @@ import bpy.types
 import xml.etree.ElementTree as etree
 import xml.dom.minidom as dom
 
+_options = {}
+def export_cycles(fp, scene, inline_textures=False):
+    global _options
+    _options = {
+        'inline_textures': inline_textures
+    }
 
-def export_cycles(fp, scene):
     for node in gen_scene_nodes(scene):
         write(node, fp)
 
@@ -18,7 +23,7 @@ def gen_scene_nodes(scene):
     written_materials = set()
 
     for object in scene.objects:
-        materials = getattr(object.data, 'materials', [])
+        materials = getattr(object.data, 'materials', []) or getattr(object, 'materials', [])
         for material in materials:
             if hash(material) not in written_materials:
                 material_node = write_material(material)
@@ -140,6 +145,7 @@ def write_material(material):
               ("MIX_SHADER",            "mix_closure",(("Shader","closure"),)),
               ("OUTPUT_MATERIAL",       "",()),
               ("SUBSURFACE_SCATTERING", "subsurface_scattering",()),
+              ("TEX_IMAGE",             "image_texture",()),
               ("TEX_MAGIC",             "magic_texture",()),
               ("TEX_NOISE",             "noise_texture",()),
               ("TEX_COORD",             "texture_coordinate",()),
@@ -151,6 +157,9 @@ def write_material(material):
 
     output_nodes = list(filter(is_output, nodes))
 
+    if not output_nodes:
+        return None
+
     nodes = list(nodes)  # We don't want to remove the node from the actual scene.
     nodes.remove(output_nodes[0])
 
@@ -158,18 +167,37 @@ def write_material(material):
     
     node = etree.Element('shader', { 'name': shader_name })
     
-    def socket_name(socket):
+    def socket_name(socket, node):
         # TODO don't do this. If it has a space, don't trust there's
         # no other with the same name but with underscores instead of spaces.
-        return socket.name.replace(' ', '_')
+        return xlateSocket(node.type, socket.name.replace(' ', '')) + socketIndex(node, socket)
     
     def shader_node_name(node):
         if is_output(node):
             return 'output'
 
-        # TODO don't do this. If it has a space, don't trust there's
-        # no other with the same name but with underscores instead of spaces.
-        return node.name.replace(' ', '_')
+        return node.name
+
+    def special_node_attrs(node):
+        def image_src(image):
+            path = node.image.filepath_raw
+            if path.startswith('//'):
+                path = path[2:]
+
+            if _options['inline_textures']:
+                return { 'src': path }
+            else:
+                import base64
+                with open(path, 'rb') as fp:
+                    return {
+                        'src': path,
+                        'inline': base64.b64encode(fp.read()).decode('ascii')
+                    }
+            
+        if node.type == 'TEX_IMAGE':
+            return image_src(node.image)
+
+        return {}
     
     for i in nodes:
         node_attrs = { 'name': shader_node_name(i) }
@@ -181,14 +209,6 @@ def write_material(material):
                         continue
                 if hasattr(j,'default_value'):
                     attr_name = j.name.replace(' ', '') + socketIndex(i, j)
-                    if inputs_or_outputs is i.inputs:
-                        pass
-                        # xmlfile += "\n " + j.name.replace(" ","")
-                    else:
-                        # TODO how can i translate this?
-                        # xmlfile += "\n >>" + j.name.replace(" ","")
-                        pass
-                    # xmlfile += socketIndex(i, j) + "=\""
                     attr_val = ''
                     try:
                         attr_val = (
@@ -204,15 +224,24 @@ def write_material(material):
                     node_attrs[attr_name] = attr_val
                 else:
                     pass # TODO ?
+        node_attrs.update(special_node_attrs(i))
         node.append(etree.Element(node_name, node_attrs))
 
     for i in links:
-        # TODO links to output
+        from_node = shader_node_name(i.from_node)
+        to_node = shader_node_name(i.to_node)
+
+        from_socket = socket_name(i.from_socket, node=i.from_node)
+        to_socket = socket_name(i.to_socket, node=i.to_node)
+
         node.append(etree.Element('connect', {
-            'from': ' '.join([shader_node_name(i.from_node),
-                xlateSocket(i.from_node.type, i.from_socket.name.replace(' ', '')) + socketIndex(i.from_node, i.from_socket)]),
-            'to': ' '.join([shader_node_name(i.to_node),
-                xlateSocket(i.to_node.type, i.to_socket.name.replace(' ', '')) + socketIndex(i.to_node, i.to_socket)])
+            'from': '%s %s' % (from_node.replace(' ', '_'), from_socket.replace(' ', '_')),
+            'to': '%s %s' % (to_node.replace(' ', '_'), to_socket.replace(' ', '_')),
+
+            'from_node': from_node,
+            'to_node': to_node,
+            'from_socket': from_socket,
+            'to_socket': to_socket
         }))
     
     return node
