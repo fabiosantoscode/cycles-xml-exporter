@@ -176,7 +176,7 @@ def write_material(material):
         if is_output(node):
             return 'output'
 
-        return node.name
+        return node.name.replace(' ', '_')
 
     def special_node_attrs(node):
         def image_src(image):
@@ -184,11 +184,18 @@ def write_material(material):
             if path.startswith('//'):
                 path = path[2:]
 
-            if _options['inline_textures']:
+            if _options['inline_textures'] and 0:
                 return { 'src': path }
             else:
                 import base64
-                with open(path, 'rb') as fp:
+                h, w = image.size
+                image = image.copy()
+                newimage = bpy.data.images.new('/tmp/cycles_export', width=w, height=h)
+                newimage.file_format = 'PNG'
+                newimage.pixels = [pix for pix in image.pixels]
+                newimage.filepath_raw = '/tmp/cycles_export'
+                newimage.save()
+                with open('/tmp/cycles_export', 'rb') as fp:
                     return {
                         'src': path,
                         'inline': base64.b64encode(fp.read()).decode('ascii')
@@ -235,9 +242,10 @@ def write_material(material):
         to_socket = socket_name(i.to_socket, node=i.to_node)
 
         node.append(etree.Element('connect', {
-            'from': '%s %s' % (from_node.replace(' ', '_'), from_socket.replace(' ', '_')),
-            'to': '%s %s' % (to_node.replace(' ', '_'), to_socket.replace(' ', '_')),
+            'from': '%s %s' % (from_node, from_socket.replace(' ', '_')),
+            'to': '%s %s' % (to_node, to_socket.replace(' ', '_')),
 
+            # forwards-compat with the new syntax for defining nodes
             'from_node': from_node,
             'to_node': to_node,
             'from_socket': from_socket,
