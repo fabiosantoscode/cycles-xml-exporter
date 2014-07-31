@@ -184,7 +184,7 @@ def write_material(material):
             if path.startswith('//'):
                 path = path[2:]
 
-            if _options['inline_textures'] and 0:
+            if _options['inline_textures']:
                 return { 'src': path }
             else:
                 import base64
