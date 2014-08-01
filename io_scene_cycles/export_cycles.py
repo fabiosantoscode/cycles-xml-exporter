@@ -1,4 +1,5 @@
 
+import random
 import math
 import os
 import mathutils
@@ -205,34 +206,55 @@ def write_material(material):
             return image_src(node.image)
 
         return {}
-    
-    for i in nodes:
-        node_attrs = { 'name': shader_node_name(i) }
-        node_name = xlateType(i.type)
-        for inputs_or_outputs in [i.inputs, i.outputs]:
-            for j in inputs_or_outputs:
-                if inputs_or_outputs is i.inputs:
-                    if isConnected(j,links):
-                        continue
-                if hasattr(j,'default_value'):
-                    attr_name = j.name.replace(' ', '') + socketIndex(i, j)
-                    attr_val = ''
-                    try:
-                        attr_val = (
-                            "%f" % j.default_value[0] + " " +
-                            "%f" % j.default_value[1] + " " +
-                            "%f" % j.default_value[2] + " ")
+
+    connect_later = []
+
+    def gen_shader_node_tree(nodes):
+        for i in nodes:
+            node_attrs = { 'name': shader_node_name(i) }
+            node_name = xlateType(i.type)
+            for inputs_or_outputs in [i.inputs, i.outputs]:
+                for j in inputs_or_outputs:
+                    if inputs_or_outputs is i.inputs:
+                        if isConnected(j,links):
+                            continue
+                    if hasattr(j,'default_value'):
+                        el = None
+                        if j.type == 'COLOR':
+                            el = etree.Element('color', { 'color': '%f %f %f' % j.default_value })
+                        if j.type == 'VALUE':
+                            el = etree.Element('value', { 'value': '%f' % j.default_value })
+
+                        if el is not None:
+                            el.attrib['name'] = j.name + ''.join(random.choice('abcdef') for x in range(5))
+                            connect_later.append(
+                                (el, j)
+                            )
+                            yield el
+
+                        attr_name = j.name.replace(' ', '') + socketIndex(i, j)
+                        attr_val = ''
                         try:
-                            attr_val += "%f" % j.default_value[3] + " "
+                            attr_val = (
+                                "%f" % j.default_value[0] + " " +
+                                "%f" % j.default_value[1] + " " +
+                                "%f" % j.default_value[2] + " ")
+                            try:
+                                attr_val += "%f" % j.default_value[3] + " "
+                            except:
+                                pass
                         except:
-                            pass
-                    except:
-                        attr_val += "%f" % j.default_value + " "
-                    node_attrs[attr_name] = attr_val
-                else:
-                    pass # TODO ?
-        node_attrs.update(special_node_attrs(i))
-        node.append(etree.Element(node_name, node_attrs))
+                            attr_val += "%f" % j.default_value + " "
+                        node_attrs[attr_name] = attr_val
+                    else:
+                        pass # TODO ?
+
+            node_attrs.update(special_node_attrs(i))
+            yield etree.Element(node_name, node_attrs)
+
+    for i in gen_shader_node_tree(nodes):
+        if i is not None:
+            node.append(i)
 
     for i in links:
         from_node = shader_node_name(i.from_node)
