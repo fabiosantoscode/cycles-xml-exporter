@@ -166,7 +166,7 @@ def write_material(material):
 
     shader_name = material.name
     
-    node = etree.Element('shader', { 'name': shader_name })
+    shader = etree.Element('shader', { 'name': shader_name })
     
     def socket_name(socket, node):
         # TODO don't do this. If it has a space, don't trust there's
@@ -202,7 +202,7 @@ def write_material(material):
                         'inline': base64.b64encode(fp.read()).decode('ascii')
                     }
             
-        if node.type == 'TEX_IMAGE':
+        if node.type == 'TEX_IMAGE' and node.image is not None:
             return image_src(node.image)
 
         return {}
@@ -210,51 +210,48 @@ def write_material(material):
     connect_later = []
 
     def gen_shader_node_tree(nodes):
-        for i in nodes:
-            node_attrs = { 'name': shader_node_name(i) }
-            node_name = xlateType(i.type)
-            for inputs_or_outputs in [i.inputs, i.outputs]:
+        for node in nodes:
+            node_attrs = { 'name': shader_node_name(node) }
+            node_name = xlateType(node.type)
+            for inputs_or_outputs in [node.inputs, node.outputs]:
                 for j in inputs_or_outputs:
-                    if inputs_or_outputs is i.inputs:
+                    if inputs_or_outputs is node.inputs:
                         if isConnected(j,links):
                             continue
                     if hasattr(j,'default_value'):
                         el = None
-                        if j.type == 'COLOR':
-                            el = etree.Element('color', { 'color': '%f %f %f' % j.default_value })
-                        if j.type == 'VALUE':
+                        if j.type == 'RGBA':
+                            el = etree.Element('color', {
+                                'color': '%f %f %f' % (
+                                    j.default_value[0],
+                                    j.default_value[1],
+                                    j.default_value[2],
+                                )
+                            })
+                        elif j.type == 'VALUE':
                             el = etree.Element('value', { 'value': '%f' % j.default_value })
+                        elif j.type == 'VECTOR':
+                            pass  # TODO no mapping for this?
+                        else:
+                            print('TODO: unsupported default_value for socket of type: %s', j.type);
+                            print('(node %s, socket %s)' % (node.name, j.name))
+                            continue
 
                         if el is not None:
                             el.attrib['name'] = j.name + ''.join(random.choice('abcdef') for x in range(5))
                             connect_later.append(
-                                (el, j)
+                                (el.attrib['name'], el.tag)
                             )
                             yield el
-
-                        attr_name = j.name.replace(' ', '') + socketIndex(i, j)
-                        attr_val = ''
-                        try:
-                            attr_val = (
-                                "%f" % j.default_value[0] + " " +
-                                "%f" % j.default_value[1] + " " +
-                                "%f" % j.default_value[2] + " ")
-                            try:
-                                attr_val += "%f" % j.default_value[3] + " "
-                            except:
-                                pass
-                        except:
-                            attr_val += "%f" % j.default_value + " "
-                        node_attrs[attr_name] = attr_val
                     else:
                         pass # TODO ?
 
-            node_attrs.update(special_node_attrs(i))
+            node_attrs.update(special_node_attrs(node))
             yield etree.Element(node_name, node_attrs)
 
-    for i in gen_shader_node_tree(nodes):
-        if i is not None:
-            node.append(i)
+    for snode in gen_shader_node_tree(nodes):
+        if snode is not None:
+            shader.append(snode)
 
     for i in links:
         from_node = shader_node_name(i.from_node)
@@ -263,7 +260,7 @@ def write_material(material):
         from_socket = socket_name(i.from_socket, node=i.from_node)
         to_socket = socket_name(i.to_socket, node=i.to_node)
 
-        node.append(etree.Element('connect', {
+        shader.append(etree.Element('connect', {
             'from': '%s %s' % (from_node, from_socket.replace(' ', '_')),
             'to': '%s %s' % (to_node, to_socket.replace(' ', '_')),
 
@@ -274,7 +271,7 @@ def write_material(material):
             'to_socket': to_socket
         }))
     
-    return node
+    return shader
 
 
 def write_light(object):
