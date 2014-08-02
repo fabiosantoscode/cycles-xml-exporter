@@ -204,6 +204,16 @@ def write_material(material):
             
         if node.type == 'TEX_IMAGE' and node.image is not None:
             return image_src(node.image)
+        elif node.type == 'RGB':
+            color = space_separated_float3(
+                node.outputs['Color']
+                    .default_value[:3])
+
+            return { 'value': color }
+        elif node.type == 'VALUE':
+            return {
+                'value': '%f' % node.outputs['Value'].default_value
+            }
 
         return {}
 
@@ -213,38 +223,46 @@ def write_material(material):
         for node in nodes:
             node_attrs = { 'name': shader_node_name(node) }
             node_name = xlateType(node.type)
-            for inputs_or_outputs in [node.inputs, node.outputs]:
-                for j in inputs_or_outputs:
-                    if inputs_or_outputs is node.inputs:
-                        if isConnected(j,links):
-                            continue
-                    if hasattr(j,'default_value'):
-                        el = None
-                        if j.type == 'RGBA':
-                            el = etree.Element('color', {
-                                'color': '%f %f %f' % (
-                                    j.default_value[0],
-                                    j.default_value[1],
-                                    j.default_value[2],
-                                )
-                            })
-                        elif j.type == 'VALUE':
-                            el = etree.Element('value', { 'value': '%f' % j.default_value })
-                        elif j.type == 'VECTOR':
-                            pass  # TODO no mapping for this?
-                        else:
-                            print('TODO: unsupported default_value for socket of type: %s', j.type);
-                            print('(node %s, socket %s)' % (node.name, j.name))
-                            continue
 
-                        if el is not None:
-                            el.attrib['name'] = j.name + ''.join(random.choice('abcdef') for x in range(5))
-                            connect_later.append(
-                                (el.attrib['name'], el.tag)
-                            )
-                            yield el
-                    else:
-                        pass # TODO ?
+            for input in node.inputs:
+                if isConnected(input,links):
+                    continue
+                if not hasattr(input,'default_value'):
+                    continue
+
+                el = None
+                sock = None
+                if input.type == 'RGBA':
+                    el = etree.Element('color', {
+                        'value': '%f %f %f' % (
+                            input.default_value[0],
+                            input.default_value[1],
+                            input.default_value[2],
+                        )
+                    })
+                    sock = 'Color'
+                elif input.type == 'VALUE':
+                    el = etree.Element('value', { 'value': '%f' % input.default_value })
+                    sock = 'Value'
+                elif input.type == 'VECTOR':
+                    pass  # TODO no mapping for this?
+                else:
+                    print('TODO: unsupported default_value for socket of type: %s', input.type);
+                    print('(node %s, socket %s)' % (node.name, input.name))
+                    continue
+
+                if el is not None:
+                    el.attrib['name'] = input.name + ''.join(
+                        random.choice('abcdef')
+                        for x in range(5))
+
+                    connect_later.append((
+                        el.attrib['name'],
+                        sock,
+                        node,
+                        input
+                    ))
+                    yield el
 
             node_attrs.update(special_node_attrs(node))
             yield etree.Element(node_name, node_attrs)
@@ -253,22 +271,40 @@ def write_material(material):
         if snode is not None:
             shader.append(snode)
 
-    for i in links:
-        from_node = shader_node_name(i.from_node)
-        to_node = shader_node_name(i.to_node)
+    for link in links:
+        from_node = shader_node_name(link.from_node)
+        to_node = shader_node_name(link.to_node)
 
-        from_socket = socket_name(i.from_socket, node=i.from_node)
-        to_socket = socket_name(i.to_socket, node=i.to_node)
+        from_socket = socket_name(link.from_socket, node=link.from_node)
+        to_socket = socket_name(link.to_socket, node=link.to_node)
 
         shader.append(etree.Element('connect', {
             'from': '%s %s' % (from_node, from_socket.replace(' ', '_')),
             'to': '%s %s' % (to_node, to_socket.replace(' ', '_')),
 
-            # forwards-compat with the new syntax for defining nodes
-            'from_node': from_node,
-            'to_node': to_node,
-            'from_socket': from_socket,
-            'to_socket': to_socket
+            # uncomment to be compatible with the new proposed syntax for defining nodes
+            # 'from_node': from_node,
+            # 'to_node': to_node,
+            # 'from_socket': from_socket,
+            # 'to_socket': to_socket
+        }))
+
+    for fn, fs, tn, ts in connect_later:
+        from_node = fn
+        to_node = shader_node_name(tn)
+
+        from_socket = fs
+        to_socket = socket_name(ts, node=tn)
+
+        shader.append(etree.Element('connect', {
+            'from': '%s %s' % (from_node, from_socket.replace(' ', '_')),
+            'to': '%s %s' % (to_node, to_socket.replace(' ', '_')),
+
+            # uncomment to be compatible with the new proposed syntax for defining nodes
+            # 'from_node': from_node,
+            # 'to_node': to_node,
+            # 'from_socket': from_socket,
+            # 'to_socket': to_socket
         }))
     
     return shader
@@ -291,7 +327,7 @@ def write_mesh(object, scene):
     nverts = ""
     verts = ""
 
-    P = ' '.join(space_separated_coords(v.co) for v in mesh.vertices)
+    P = ' '.join(space_separated_float3(v.co) for v in mesh.vertices)
 
     for i, f in enumerate(mesh.tessfaces):
         nverts += str(len(f.vertices)) + " "
@@ -332,11 +368,18 @@ def wrap_in_state(xml_element, object):
 
     return state
 
-def space_separated_coords(coords):
-    return ' '.join(map(str, coords))
+def space_separated_float3(coords):
+    float3 = list(map(str, coords))
+    assert len(float3) == 3, 'tried to serialize %r into a float3' % float3
+    return ' '.join(float3)
+
+def space_separated_float4(coords):
+    float4 = list(map(str, coords))
+    assert len(float4) == 4, 'tried to serialize %r into a float4' % float4
+    return ' '.join(float4)
 
 def space_separated_matrix(matrix):
-    return ' '.join(space_separated_coords(row) + ' ' for row in matrix)
+    return ' '.join(space_separated_float4(row) + ' ' for row in matrix)
 
 def write(node, fp):
     # strip(node)
