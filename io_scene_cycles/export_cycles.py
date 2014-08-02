@@ -103,9 +103,9 @@ def write_material(material):
                 return i[1]
         return typename.lower()
     
-    def isConnected(socket,links):
-        for i in links:
-            if i.from_socket is socket or i.to_socket is socket:
+    def isConnected(socket, links):
+        for link in links:
+            if link.from_socket == socket or link.to_socket == socket:
                 return True
         return False
 
