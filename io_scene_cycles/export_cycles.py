@@ -24,8 +24,7 @@ def gen_scene_nodes(scene):
     yield write_film(scene)
     written_materials = set()
 
-    if scene.world.use_nodes:
-        yield write_material(scene.world, 'background')
+    yield write_material(scene.world, 'background')
 
     for object in scene.objects:
         materials = getattr(object.data, 'materials', []) or getattr(object, 'materials', [])
@@ -88,8 +87,11 @@ def write_object(object, scene):
 
 # from the Node Wrangler, by Barte
 def write_material(material, tag_name='shader'):
+    did_copy = False
     if not material.use_nodes:
-        return None
+        did_copy = True
+        material = material.copy()
+        material.use_nodes = True
 
     def xlateSocket(typename, socketname):
         for i in xlate:
@@ -309,7 +311,10 @@ def write_material(material, tag_name='shader'):
             # 'from_socket': from_socket,
             # 'to_socket': to_socket
         }))
-    
+
+    if did_copy:
+        # TODO delete the material we created as a hack to support materials with use_nodes == False
+        pass
     return shader
 
 
