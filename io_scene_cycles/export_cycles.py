@@ -15,13 +15,17 @@ def export_cycles(fp, scene, inline_textures=False):
     }
 
     for node in gen_scene_nodes(scene):
-        write(node, fp)
+        if node is not None:
+            write(node, fp)
 
     return {'FINISHED'}
 
 def gen_scene_nodes(scene):
     yield write_film(scene)
     written_materials = set()
+
+    if scene.world.use_nodes:
+        yield write_material(scene.world, 'background')
 
     for object in scene.objects:
         materials = getattr(object.data, 'materials', []) or getattr(object, 'materials', [])
@@ -32,9 +36,7 @@ def gen_scene_nodes(scene):
                     written_materials.add(hash(material))
                     yield material_node
 
-        node = write_object(object, scene=scene)
-        if node is not None:
-            yield node
+        yield  write_object(object, scene=scene)
 
 
 def write_camera(camera, scene):
@@ -85,7 +87,7 @@ def write_object(object, scene):
 
 
 # from the Node Wrangler, by Barte
-def write_material(material):
+def write_material(material, tag_name='shader'):
     if not material.use_nodes:
         return None
 
@@ -110,7 +112,7 @@ def write_material(material):
         return False
 
     def is_output(node):
-        return node.type in ('OUTPUT', 'OUTPUT_MATERIAL')
+        return node.type in ('OUTPUT', 'OUTPUT_MATERIAL', 'OUTPUT_WORLD')
 
     def socketIndex(node, socket):
         socketindex=0
@@ -165,8 +167,9 @@ def write_material(material):
     nodes.remove(output_nodes[0])
 
     shader_name = material.name
-    
-    shader = etree.Element('shader', { 'name': shader_name })
+
+    # tag_name is usually 'shader' but could be 'background' for world shaders
+    shader = etree.Element(tag_name, { 'name': shader_name })
     
     def socket_name(socket, node):
         # TODO don't do this. If it has a space, don't trust there's
